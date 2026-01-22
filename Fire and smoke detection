@@ -1,0 +1,67 @@
+import cv2
+import base64
+from inference_sdk import InferenceHTTPClient
+
+# Initialize client
+CLIENT = InferenceHTTPClient(
+    api_url="https://serverless.roboflow.com",
+    api_key="yGASWRk81ktUKfSf95GS"   # <-- replace
+)
+
+MODEL_ID = "moro-ai/2"
+
+cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    print("❌ Cannot open webcam")
+    exit()
+
+print("🎥 Webcam started - press Q to quit")
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        continue
+
+    # Encode frame to jpg
+    success, buffer = cv2.imencode(".jpg", frame)
+    if not success:
+        continue
+
+    # Base64 encode image
+    img_b64 = base64.b64encode(buffer).decode("utf-8")
+
+    # Send request
+    try:
+        result = CLIENT.infer(img_b64, model_id=MODEL_ID)
+        predictions = result.get("predictions", [])
+    except Exception:
+        predictions = []
+
+    # Draw boxes
+    for pred in predictions:
+        x = int(pred["x"])
+        y = int(pred["y"])
+        w = int(pred["width"])
+        h = int(pred["height"])
+        cls = pred["class"]
+        conf = pred["confidence"]
+
+        x1 = x - w // 2
+        y1 = y - h // 2
+        x2 = x + w // 2
+        y2 = y + h // 2
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+        cv2.putText(frame, f"{cls} {conf:.2f}", (x1, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+
+    # ALWAYS show frame
+    cv2.imshow("Live Roboflow Detection", frame)
+
+    # Press Q to exit
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
